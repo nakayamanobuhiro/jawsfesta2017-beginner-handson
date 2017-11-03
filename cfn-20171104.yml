@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: JAWS-Festa 2017 hands-on (ap-northeast-1)
+
+Parameters:
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 192.168.0.0/16
+      Tags:
+      - Key: Name
+        Value: test-vpc-cfn
+  IGW:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+      - Key: Name
+        Value: test-igw-cfn
+  AttachIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: IGW
+
+  PublicA:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: ap-northeast-1a
+      CidrBlock: 192.168.0.0/24
+      Tags:
+        - Key: Name
+          Value: test-subnetA-cfn
+      VpcId: !Ref VPC
+  PublicC:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: ap-northeast-1c
+      CidrBlock: 192.168.1.0/24
+      Tags:
+        - Key: Name
+          Value: test-subnetC-cfn
+      VpcId: !Ref VPC
+
+  PublicRT:
+    Type: "AWS::EC2::RouteTable"
+    Properties: 
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: test-rt-cfn
+
+  PublicRoute: 
+    Type: "AWS::EC2::Route"
+    Properties: 
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref IGW
+      RouteTableId: !Ref PublicRT
+
+  PublicSubnetRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicA
+      RouteTableId: !Ref PublicRT
+  PublicSubnetRouteTableAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicC
+      RouteTableId: !Ref PublicRT
+
+  SGWebServer:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties: 
+      GroupName: test-sg-cfn
+      GroupDescription: "HTTP"
+      Tags:
+        - Key: Name
+          Value: test-sg-cfn
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+
+  WebServerInstance: 
+    Type: "AWS::EC2::Instance"
+    Properties: 
+      ImageId: ami-2a69be4c
+      InstanceType: t2.micro
+      KeyName: !Ref KeyPairName
+      Tags:
+        - Key: Name
+          Value: WebServer
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y nginx
+          service nginx start
+          chkconfig nginx on
+          </script>
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PublicA
+          GroupSet:
+            - !GetAtt SGWebServer.GroupId
+
+
+
+Outputs:
+  PublicIP:
+    Description: "PublicIP"
+    Value: !GetAtt WebServerInstance.PublicIp
+
